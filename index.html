@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#090d0c">
+  <title>GENESIS AI — Chat</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="GENESIS AI"><span class="brand-mark">G</span><span>GENESIS <i>AI</i></span></a>
+      <div class="top-actions"><span class="connection"><b></b> CHAT INTERFACE</span><button id="newChat" class="icon-button" title="Новый чат" aria-label="Новый чат">＋</button></div>
+    </header>
+    <section class="chat" aria-label="Чат с GENESIS AI">
+      <div id="messages" class="messages" aria-live="polite">
+        <div class="welcome" id="welcome">
+          <div class="hero-mark">G</div>
+          <div class="eyebrow">GENESIS AI · CONVERSATION</div>
+          <h1>Давай начнём.</h1>
+          <p>Напиши сообщение — чат передаст его подключённому движку GENESIS.</p>
+        </div>
+      </div>
+      <form id="chatForm" class="composer">
+        <textarea id="prompt" rows="1" maxlength="12000" placeholder="Напиши сообщение..." aria-label="Сообщение"></textarea>
+        <div class="composer-footer"><span>Enter — отправить · Shift + Enter — новая строка</span><button id="send" type="submit" aria-label="Отправить">↑</button></div>
+      </form>
+      <p class="footnote">Ответы генерируются подключённым движком. Без подключённого движка чат сообщит об этом.</p>
+    </section>
+  </main>
+  <script src="/app.js" defer></script>
+</body>
+</html>
