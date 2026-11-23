@@ -149,9 +149,7 @@ def answer_locally(message):
                 "Полноценную нейросеть мы ещё будем проектировать и обучать."), "rules"
     if lower in ("спасибо", "благодарю", "thanks"):
         return "Пожалуйста! Если нужно узнать факты, включи поиск в интернете.", "rules"
-    return ("Пока я не могу надёжно ответить на этот вопрос без поиска. "
-            "Включи переключатель «Искать в интернете» — я соберу найденные материалы "
-            "и покажу ссылки на источники."), "rules"
+    return None, "needs_search"
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -198,7 +196,11 @@ class Handler(BaseHTTPRequestHandler):
             message = str(payload.get("message", "")).strip()
             if not message:
                 return self.send_json(400, {"error": "Напиши сообщение."})
-            if payload.get("web_search") is True:
+            answer, engine = answer_locally(message)
+            sources = []
+            # Local skills (greetings, identity, calculator) always run first.
+            # Web search is only used when local rules cannot answer the question.
+            if answer is None and payload.get("web_search") is True:
                 try:
                     sources = search_web(message)
                     answer = compose_search_answer(message, sources)
@@ -208,9 +210,10 @@ class Handler(BaseHTTPRequestHandler):
                     answer = ("Не удалось подключиться к поиску прямо сейчас. "
                               "Проверь соединение сервера и попробуй ещё раз.")
                     engine, sources = "GENESIS-rules-v0.1", []
-            else:
-                answer, engine = answer_locally(message)
-                sources = []
+            elif answer is None:
+                answer = ("Я пока не знаю ответа на этот вопрос. "
+                          "Включи поиск в интернете — попробую найти материалы.")
+                engine = "GENESIS-rules-v0.1"
             return self.send_json(200, {"reply": answer, "sources": sources, "engine": engine})
         except (ValueError, json.JSONDecodeError):
             return self.send_json(400, {"error": "Некорректный JSON-запрос."})
