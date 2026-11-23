@@ -56,7 +56,7 @@ def safe_calculate(text):
 
 
 class DuckParser(HTMLParser):
-    """Extract DuckDuckGo HTML result titles, links and snippets."""
+    """Extract result titles and snippets from DuckDuckGo HTML."""
     def __init__(self):
         super().__init__()
         self.items = []
@@ -64,10 +64,17 @@ class DuckParser(HTMLParser):
         self.capture = None
         self.snippet_depth = 0
 
+    def _finish_current(self):
+        if self.current and self.current.get("title", "").strip():
+            self.items.append(self.current)
+        self.current = None
+        self.capture = None
+
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
         classes = attrs.get("class", "").split()
         if tag == "a" and "result__a" in classes:
+            self._finish_current()
             self.current = {"title": "", "url": attrs.get("href", ""), "snippet": ""}
             self.capture = "title"
         elif self.current and "result__snippet" in classes:
@@ -78,9 +85,6 @@ class DuckParser(HTMLParser):
 
     def handle_endtag(self, tag):
         if self.capture == "title" and tag == "a":
-            if self.current:
-                self.items.append(self.current)
-            self.current = None
             self.capture = None
         elif self.capture == "snippet" and tag in ("div", "span"):
             self.snippet_depth -= 1
@@ -91,6 +95,10 @@ class DuckParser(HTMLParser):
         if self.current and self.capture in ("title", "snippet"):
             key = self.capture
             self.current[key] = (self.current[key] + " " + data).strip()
+
+    def close(self):
+        super().close()
+        self._finish_current()
 
 
 def search_web(query, limit=5):
@@ -133,24 +141,33 @@ def compose_search_answer(query, sources):
     return "\n".join(lines)
 
 
-def answer_locally(message):
+def answer_locally(message, history=None):
+    """Conversational rules; unknown factual questions are routed to web search."""
     text = message.strip()
-    lower = text.lower()
+    lower = re.sub(r"\s+", " ", text.lower()).strip(" .,!?:;")
     calculation = safe_calculate(text)
     if calculation is not None:
         return "Результат: " + calculation, "calculator"
-    if re.search(r"\b(привет|здравствуй|здравствуйте|хай|hello|hi)\b", lower):
-        return ("Привет! Я GENESIS — пока ранняя версия собственного движка. "
-                "Умею выполнять простые вычисления и искать информацию в интернете. "
-                "Задай вопрос или включи поиск."), "rules"
-    if any(word in lower for word in ("кто ты", "что ты умеешь", "о себе", "что такое genesis")):
-        return ("Я GENESIS AI. Сейчас мой движок состоит из собственного Python-кода: "
-                "простые правила, безопасный калькулятор и поиск с извлечением найденных описаний. "
-                "Полноценную нейросеть мы ещё будем проектировать и обучать."), "rules"
-    if lower in ("спасибо", "благодарю", "thanks"):
-        return "Пожалуйста! Если нужно узнать факты, включи поиск в интернете.", "rules"
-    return None, "needs_search"
 
+    if re.search(r"\b(привет|здравствуй|здравствуйте|хай|hello|hi)\b", lower):
+        return "Привет! 👋 Рад тебя видеть. Что будем делать?", "conversation"
+    if re.search(r"\b(как дела|как ты|как поживаешь|как жизнь|ты как)\b", lower):
+        return "У меня всё отлично — я на связи и готов помогать! А у тебя как дела?", "conversation"
+    if re.search(r"\b(что нового|что новенького)\b", lower):
+        return "Пока развиваюсь: учусь лучше обрабатывать сообщения, искать информацию и отвечать точнее. А у тебя что нового?", "conversation"
+    if re.search(r"\b(доброе утро|добрый день|добрый вечер|спокойной ночи)\b", lower):
+        return "И тебе хорошего дня! 😊 Чем займёмся?", "conversation"
+    if re.search(r"\b(пока|до свидания|увидимся|бай)\b", lower):
+        return "Пока! Буду здесь, когда понадоблюсь. 👋", "conversation"
+    if re.search(r"\b(спасибо|благодарю|thanks)\b", lower):
+        return "Пожалуйста! Рад помочь 🙂", "conversation"
+    if re.search(r"\b(кто ты|что ты умеешь|о себе|что такое genesis|как тебя зовут)\b", lower):
+        return ("Я GENESIS — экспериментальный ассистент с собственным кодом. "
+                "Сейчас умею поддерживать базовый диалог, считать и искать фактическую информацию в интернете. "
+                "Собственную обучаемую языковую модель мы ещё создаём."), "conversation"
+    if re.search(r"\b(классно|круто|молодец|супер)\b", lower):
+        return "Спасибо! 😄 Продолжаем?", "conversation"
+    return None, "needs_search"
 
 class Handler(BaseHTTPRequestHandler):
     def send_json(self, status, payload):
@@ -165,7 +182,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?", 1)[0]
         if path == "/api/health":
-            return self.send_json(200, {"status": "ok", "engine": "GENESIS-native-v0.1",
+            return self.send_json(200, {"status": "ok", "engine": "GENESIS-native-v0.2",
                                         "model": "none", "web_search": True})
         if path == "/":
             path = "/index.html"
@@ -200,7 +217,7 @@ class Handler(BaseHTTPRequestHandler):
             sources = []
             # Local skills (greetings, identity, calculator) always run first.
             # Web search is only used when local rules cannot answer the question.
-            if answer is None and payload.get("web_search") is True:
+            if answer is None and payload.get("web_search", True) is True:
                 try:
                     sources = search_web(message)
                     answer = compose_search_answer(message, sources)
