@@ -48,3 +48,20 @@ class ImageDDPM(nn.Module):
         noise = torch.randn_like(image)
         variance = self.posterior_variance[t].to(image.dtype)
         return mean + variance.sqrt() * noise
+
+    @torch.no_grad()
+    def ddim_step(self, model, image: torch.Tensor, t: int, previous_t: int,
+                  text_ids: torch.Tensor, guidance_scale: float = 4.0,
+                  null_ids: torch.Tensor | None = None) -> torch.Tensor:
+        """DDIM update supporting skipped timesteps for faster sampling."""
+        batch = image.shape[0]
+        times = torch.full((batch,), t, device=image.device, dtype=torch.long)
+        eps = model(image, times, text_ids)
+        if null_ids is not None and guidance_scale != 1.0:
+            uncond = model(image, times, null_ids)
+            eps = uncond + guidance_scale * (eps - uncond)
+        alpha_t = self.alpha_bars[t].to(image.dtype)
+        alpha_prev = (self.alpha_bars[previous_t].to(image.dtype)
+                      if previous_t >= 0 else torch.ones((), device=image.device, dtype=image.dtype))
+        predicted_clean = (image - (1 - alpha_t).sqrt() * eps) / alpha_t.sqrt()
+        return alpha_prev.sqrt() * predicted_clean + (1 - alpha_prev).sqrt() * eps
