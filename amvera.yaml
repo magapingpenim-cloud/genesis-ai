@@ -5,5 +5,5 @@ meta:
     version: "3.12"
 
 run:
-  scriptName: app.py
+  command: python3 app.py
   containerPort: 80
