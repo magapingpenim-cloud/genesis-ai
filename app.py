@@ -182,7 +182,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?", 1)[0]
         if path == "/api/health":
-            return self.send_json(200, {"status": "ok", "engine": "GENESIS-native-v0.2",
+            return self.send_json(200, {"status": "ok", "engine": "GENESIS-native-v0.3",
                                         "model": "none", "web_search": True})
         if path == "/":
             path = "/index.html"
@@ -217,7 +217,7 @@ class Handler(BaseHTTPRequestHandler):
             sources = []
             # Local skills (greetings, identity, calculator) always run first.
             # Web search is only used when local rules cannot answer the question.
-            if answer is None and payload.get("web_search", True) is True:
+            if answer is None:
                 try:
                     sources = search_web(message)
                     answer = compose_search_answer(message, sources)
@@ -227,10 +227,6 @@ class Handler(BaseHTTPRequestHandler):
                     answer = ("Не удалось подключиться к поиску прямо сейчас. "
                               "Проверь соединение сервера и попробуй ещё раз.")
                     engine, sources = "GENESIS-rules-v0.1", []
-            elif answer is None:
-                answer = ("Я пока не знаю ответа на этот вопрос. "
-                          "Включи поиск в интернете — попробую найти материалы.")
-                engine = "GENESIS-rules-v0.1"
             return self.send_json(200, {"reply": answer, "sources": sources, "engine": engine})
         except (ValueError, json.JSONDecodeError):
             return self.send_json(400, {"error": "Некорректный JSON-запрос."})
