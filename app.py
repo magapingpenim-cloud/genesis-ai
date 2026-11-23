@@ -1,111 +1,157 @@
-"""GENESIS chat backend: Ollama-compatible answers plus DuckDuckGo web search."""
+"""GENESIS v0.1 — self-written rule engine and web-search answer composer.
+No hosted language-model API and no third-party Python packages.
+"""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse, parse_qs
+import ast
+import operator
 import json
 import os
+import re
+import html
 
 ROOT = Path(__file__).resolve().parent
 PORT = int(os.environ.get("PORT", "80"))
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "https://ollama.com").rstrip("/")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:31b")
-OLLAMA_API_KEY = os.environ.get("OLLAMA_API_KEY", "").strip()
 MAX_HISTORY = 12
+OPS = {
+    ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+    ast.Div: operator.truediv, ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod, ast.Pow: operator.pow,
+    ast.USub: operator.neg, ast.UAdd: operator.pos,
+}
 
 
-class SearchParser(HTMLParser):
+def safe_calculate(text):
+    """Evaluate only basic arithmetic; never execute arbitrary Python."""
+    candidate = text.strip().replace(",", ".").replace("×", "*").replace("÷", "/").replace("^", "**")
+    candidate = re.sub(r"(?i)^(сколько будет|посчитай|вычисли|реши)\s*", "", candidate).strip(" ?=")
+    if not candidate or len(candidate) > 100 or not re.fullmatch(r"[\d\s.+*/()%\-]+", candidate):
+        return None
+    try:
+        tree = ast.parse(candidate, mode="eval")
+        def visit(node):
+            if isinstance(node, ast.Expression):
+                return visit(node.body)
+            if isinstance(node, ast.Constant) and type(node.value) in (int, float):
+                return node.value
+            if isinstance(node, ast.BinOp) and type(node.op) in OPS:
+                left, right = visit(node.left), visit(node.right)
+                if isinstance(node.op, ast.Pow) and abs(right) > 8:
+                    raise ValueError("exponent too large")
+                value = OPS[type(node.op)](left, right)
+                if abs(value) > 10**15:
+                    raise ValueError("result too large")
+                return value
+            if isinstance(node, ast.UnaryOp) and type(node.op) in OPS:
+                return OPS[type(node.op)](visit(node.operand))
+            raise ValueError("unsupported expression")
+        result = visit(tree)
+        return str(int(result)) if isinstance(result, float) and result.is_integer() else str(result)
+    except (SyntaxError, ValueError, ZeroDivisionError, OverflowError):
+        return None
+
+
+class DuckParser(HTMLParser):
+    """Extract DuckDuckGo HTML result titles, links and snippets."""
     def __init__(self):
         super().__init__()
-        self.results = []
+        self.items = []
         self.current = None
         self.capture = None
-        self.depth = 0
+        self.snippet_depth = 0
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
         classes = attrs.get("class", "").split()
         if tag == "a" and "result__a" in classes:
-            self.current = {"title": "", "url": attrs.get("href", "")}
+            self.current = {"title": "", "url": attrs.get("href", ""), "snippet": ""}
             self.capture = "title"
-        elif self.current and tag in ("a", "div") and "result__snippet" in classes:
+        elif self.current and "result__snippet" in classes:
             self.capture = "snippet"
-            self.depth = 1
-        elif self.capture == "snippet" and tag == "div":
-            self.depth += 1
+            self.snippet_depth = 1
+        elif self.capture == "snippet" and tag in ("div", "span"):
+            self.snippet_depth += 1
 
     def handle_endtag(self, tag):
-        if self.capture == "snippet" and tag == "div":
-            self.depth -= 1
-            if self.depth <= 0:
-                self.capture = None
-        elif self.capture == "title" and tag == "a":
+        if self.capture == "title" and tag == "a":
+            if self.current:
+                self.items.append(self.current)
+            self.current = None
             self.capture = None
-            if self.current and self.current["title"].strip():
-                self.results.append(self.current)
-                self.current = None
+        elif self.capture == "snippet" and tag in ("div", "span"):
+            self.snippet_depth -= 1
+            if self.snippet_depth <= 0:
+                self.capture = None
 
     def handle_data(self, data):
         if self.current and self.capture in ("title", "snippet"):
             key = self.capture
-            self.current[key] = (self.current.get(key, "") + " " + data).strip()
+            self.current[key] = (self.current[key] + " " + data).strip()
 
 
 def search_web(query, limit=5):
     url = "https://html.duckduckgo.com/html/?" + urlencode({"q": query})
     request = Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; GENESIS-AI/0.1)"})
-    with urlopen(request, timeout=15) as response:
+    with urlopen(request, timeout=18) as response:
         page = response.read().decode("utf-8", "replace")
-    parser = SearchParser()
+    parser = DuckParser()
     parser.feed(page)
-    results = []
-    for item in parser.results:
-        link = item.get("url", "")
+    results, seen = [], set()
+    for item in parser.items:
+        link = html.unescape(item["url"])
         if link.startswith("//"):
             link = "https:" + link
         if "duckduckgo.com/l/?" in link:
             link = parse_qs(urlparse(link).query).get("uddg", [link])[0]
-        if link.startswith("http") and item.get("title"):
-            results.append({"title": item["title"], "url": link, "snippet": item.get("snippet", "")})
+        if link.startswith("http") and link not in seen and item["title"]:
+            seen.add(link)
+            results.append({
+                "title": re.sub(r"\s+", " ", item["title"]).strip(),
+                "url": link,
+                "snippet": re.sub(r"\s+", " ", item["snippet"]).strip()
+            })
         if len(results) >= limit:
             break
     return results
 
 
-def ask_model(messages, sources):
-    if not OLLAMA_API_KEY:
-        raise RuntimeError("Не настроен OLLAMA_API_KEY. Добавь ключ Ollama в переменные приложения Amvera.")
-    system = (
-        "Ты GENESIS AI — полезный русскоязычный ассистент. Отвечай прямо, понятно и честно. "
-        "Если ниже даны результаты веб-поиска, используй их как источники фактов, не выдумывай "
-        "сведения и указывай, если источники не дают ответа. В конце ответа кратко упомяни "
-        "источники по названиям, если поиск использовался. Не утверждай, что искал в интернете, "
-        "если результатов поиска нет."
-    )
-    if sources:
-        context = "\n\nРЕЗУЛЬТАТЫ ВЕБ-ПОИСКА:\n" + "\n".join(
-            f"{i+1}. {s['title']}\nURL: {s['url']}\nОписание: {s['snippet']}"
-            for i, s in enumerate(sources)
-        )
-        system += context
-    payload = {
-        "model": OLLAMA_MODEL,
-        "messages": [{"role": "system", "content": system}] + messages[-MAX_HISTORY:],
-        "stream": False,
-        "options": {"temperature": 0.4}
-    }
-    headers = {"Content-Type": "application/json", "Accept": "application/json",
-               "Authorization": "Bearer " + OLLAMA_API_KEY}
-    request = Request(OLLAMA_HOST + "/api/chat", data=json.dumps(payload).encode("utf-8"),
-                      headers=headers, method="POST")
-    with urlopen(request, timeout=180) as response:
-        result = json.loads(response.read().decode("utf-8"))
-    answer = result.get("message", {}).get("content", "").strip()
-    if not answer:
-        raise RuntimeError("Модель вернула пустой ответ.")
-    return answer
+def compose_search_answer(query, sources):
+    """Compose a transparent extractive response from search snippets, not an LLM."""
+    if not sources:
+        return ("Я выполнил поиск, но не получил подходящих результатов. "
+                "Попробуй переформулировать запрос или повторить позже.")
+    lines = ["Вот что удалось найти по запросу «" + query + "»:"]
+    for item in sources[:4]:
+        snippet = item["snippet"] or "Открой источник, чтобы прочитать подробности."
+        lines.append("• " + item["title"] + " — " + snippet)
+    lines.append("\nЭто краткая сводка найденных описаний, а не ответ обученной нейросети. "
+                 "Открой источники ниже, чтобы проверить детали.")
+    return "\n".join(lines)
+
+
+def answer_locally(message):
+    text = message.strip()
+    lower = text.lower()
+    calculation = safe_calculate(text)
+    if calculation is not None:
+        return "Результат: " + calculation, "calculator"
+    if re.search(r"\b(привет|здравствуй|здравствуйте|хай|hello|hi)\b", lower):
+        return ("Привет! Я GENESIS — пока ранняя версия собственного движка. "
+                "Умею выполнять простые вычисления и искать информацию в интернете. "
+                "Задай вопрос или включи поиск."), "rules"
+    if any(word in lower for word in ("кто ты", "что ты умеешь", "о себе", "что такое genesis")):
+        return ("Я GENESIS AI. Сейчас мой движок состоит из собственного Python-кода: "
+                "простые правила, безопасный калькулятор и поиск с извлечением найденных описаний. "
+                "Полноценную нейросеть мы ещё будем проектировать и обучать."), "rules"
+    if lower in ("спасибо", "благодарю", "thanks"):
+        return "Пожалуйста! Если нужно узнать факты, включи поиск в интернете.", "rules"
+    return ("Пока я не могу надёжно ответить на этот вопрос без поиска. "
+            "Включи переключатель «Искать в интернете» — я соберу найденные материалы "
+            "и покажу ссылки на источники."), "rules"
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -121,8 +167,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?", 1)[0]
         if path == "/api/health":
-            return self.send_json(200, {"status": "ok", "model_configured": bool(OLLAMA_API_KEY),
-                                        "model": OLLAMA_MODEL, "web_search": True})
+            return self.send_json(200, {"status": "ok", "engine": "GENESIS-native-v0.1",
+                                        "model": "none", "web_search": True})
         if path == "/":
             path = "/index.html"
         target = (ROOT / path.lstrip("/")).resolve()
@@ -130,7 +176,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_error(403)
         if not target.is_file():
             return self.send_error(404)
-        content_type = "text/html; charset=utf-8" if target.suffix == ".html" else "text/css; charset=utf-8" if target.suffix == ".css" else "application/javascript; charset=utf-8" if target.suffix == ".js" else "application/octet-stream"
+        content_type = ("text/html; charset=utf-8" if target.suffix == ".html" else
+                        "text/css; charset=utf-8" if target.suffix == ".css" else
+                        "application/javascript; charset=utf-8" if target.suffix == ".js" else
+                        "application/octet-stream")
         data = target.read_bytes()
         self.send_response(200)
         self.send_header("Content-Type", content_type)
@@ -149,29 +198,20 @@ class Handler(BaseHTTPRequestHandler):
             message = str(payload.get("message", "")).strip()
             if not message:
                 return self.send_json(400, {"error": "Напиши сообщение."})
-            history = payload.get("history", [])
-            if not isinstance(history, list):
-                history = []
-            clean_history = []
-            for item in history[-MAX_HISTORY:]:
-                if isinstance(item, dict) and item.get("role") in ("user", "assistant") and isinstance(item.get("content"), str):
-                    clean_history.append({"role": item["role"], "content": item["content"][:12000]})
-            clean_history.append({"role": "user", "content": message})
-            sources = []
             if payload.get("web_search") is True:
                 try:
                     sources = search_web(message)
+                    answer = compose_search_answer(message, sources)
+                    engine = "GENESIS-search-v0.1"
                 except (HTTPError, URLError, TimeoutError) as error:
-                    print("Web search failed:", repr(error), flush=True)
-            answer = ask_model(clean_history, sources)
-            return self.send_json(200, {"reply": answer, "sources": sources, "model": OLLAMA_MODEL})
-        except HTTPError as error:
-            detail = error.read(1500).decode("utf-8", "replace")
-            return self.send_json(502, {"error": f"Ошибка AI-провайдера ({error.code}): {detail}"})
-        except (URLError, TimeoutError) as error:
-            return self.send_json(502, {"error": f"Не удалось связаться с AI-моделью: {error}"})
-        except RuntimeError as error:
-            return self.send_json(503, {"error": str(error)})
+                    print("Search failed:", repr(error), flush=True)
+                    answer = ("Не удалось подключиться к поиску прямо сейчас. "
+                              "Проверь соединение сервера и попробуй ещё раз.")
+                    engine, sources = "GENESIS-rules-v0.1", []
+            else:
+                answer, engine = answer_locally(message)
+                sources = []
+            return self.send_json(200, {"reply": answer, "sources": sources, "engine": engine})
         except (ValueError, json.JSONDecodeError):
             return self.send_json(400, {"error": "Некорректный JSON-запрос."})
         except Exception as error:
@@ -184,5 +224,5 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-    print(f"GENESIS ready on port {PORT}; model configured: {bool(OLLAMA_API_KEY)}", flush=True)
+    print(f"GENESIS native engine v0.1 listening on port {PORT}", flush=True)
     server.serve_forever()
