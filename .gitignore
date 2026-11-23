@@ -1,0 +1,13 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.env
+data/*.txt
+data/private/
+checkpoints/
+*.pt
+*.pth
+*.safetensors
