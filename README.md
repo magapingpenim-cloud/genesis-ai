@@ -30,3 +30,14 @@ Backend отправляет JSON:
 Проверка сервера: `GET /api/health`.
 
 Пока `ENGINE_URL` не задан, чат честно сообщает, что движок не подключён. Он не имитирует ответы модели.
+
+
+## AI answers and web search
+
+The chat now sends conversation history to an Ollama-compatible chat model and can optionally search the web with DuckDuckGo HTML results. Set these Amvera environment variables:
+
+- `OLLAMA_API_KEY` — required bearer key for the Ollama cloud API. Never commit it to Git.
+- `OLLAMA_MODEL` — optional model name; default `gemma4:31b`.
+- `OLLAMA_HOST` — optional API host; default `https://ollama.com`.
+
+In Amvera → Variables, add `OLLAMA_API_KEY`. Web search is toggled in the chat UI. Search results are passed as context to the model and shown as clickable sources. Without the key, the app returns a clear configuration error rather than pretending to answer.
