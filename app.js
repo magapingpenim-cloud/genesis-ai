@@ -24,7 +24,7 @@ function addMessage(role,text,sources=[]){
 async function submitMessage(text){
   if(!text||busy)return;
   addMessage("user",text);input.value="";input.style.height="auto";busy=true;send.disabled=true;
-  const pending=addMessage("assistant",searchToggle.checked?"Ищу информацию и готовлю ответ…":"Готовлю ответ…");pending.classList.add("typing");
+  const pending=addMessage("assistant",searchToggle.checked?"Проверяю вопрос и при необходимости ищу…":"Готовлю ответ…");pending.classList.add("typing");
   try{
     const response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:text,history,conversation_id:window.genesisConversationId,web_search:searchToggle.checked})});
     const data=await response.json().catch(()=>({error:"Сервер вернул некорректный ответ."}));
