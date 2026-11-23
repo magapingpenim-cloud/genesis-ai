@@ -27,7 +27,9 @@ class CausalBlock(nn.Module):
 
     def forward(self, x):
         z = self.norm1(x)
-        a, _ = self.attention(z, z, z, is_causal=True, need_weights=False)
+        length = z.size(1)
+        causal_mask = torch.triu(torch.ones(length, length, device=z.device, dtype=torch.bool), diagonal=1)
+        a, _ = self.attention(z, z, z, attn_mask=causal_mask, need_weights=False)
         x = x + self.dropout(a)
         return x + self.ff(self.norm2(x))
 
