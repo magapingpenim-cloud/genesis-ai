@@ -3,96 +3,61 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#070b0d">
-  <meta name="description" content="GENESIS AI — исследовательский проект локальной генерации кинематографического видео. Собственная архитектура, локальные вычисления, открытая разработка.">
-  <title>GENESIS AI — Local Video Intelligence</title>
+  <meta name="theme-color" content="#080b0d">
+  <meta name="description" content="GENESIS AI — интерфейс общения с искусственным интеллектом.">
+  <title>GENESIS AI</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
-  <header class="nav wrap">
-    <a class="brand" href="#" aria-label="GENESIS home"><span class="brand-mark">G</span><span>GENESIS<span class="brand-ai"> AI</span></span></a>
-    <nav class="nav-links" aria-label="Main navigation">
-      <a href="#vision">Концепция</a><a href="#architecture">Архитектура</a><a href="#roadmap">Разработка</a>
-    </nav>
-    <a class="nav-cta" href="https://github.com/magapingpenim-cloud/genesis-ai" target="_blank" rel="noreferrer">GitHub <span>↗</span></a>
-    <button class="menu-toggle" aria-label="Открыть меню" aria-expanded="false">☰</button>
-  </header>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="./"><span class="brand-symbol">G</span><span>GENESIS<span class="brand-accent"> AI</span></span></a>
+      <button class="new-chat" id="newChat"><span>＋</span> Новый чат</button>
+      <div class="side-label">РАБОЧЕЕ ПРОСТРАНСТВО</div>
+      <div class="side-item active"><span class="side-icon">◉</span> Чат с GENESIS</div>
+      <div class="side-bottom">
+        <div class="model-status"><span class="status-dot"></span><span><b>GENESIS</b><small>Интерфейс готовится</small></span></div>
+        <a class="github-link" href="https://github.com/magapingpenim-cloud/genesis-ai" target="_blank" rel="noreferrer">Исходный код <span>↗</span></a>
+      </div>
+    </aside>
 
-  <main>
-    <section class="hero wrap">
-      <div class="hero-copy">
-        <div class="eyebrow"><span class="pulse"></span> INDEPENDENT VIDEO GENERATION RESEARCH</div>
-        <h1>Видео.<br><span>Созданное</span><br>вычислениями.</h1>
-        <p class="hero-lead">Мы создаём GENESIS — собственную технологическую платформу для генерации кинематографического видео прямо на устройстве пользователя.</p>
-        <div class="hero-actions">
-          <a class="button button-primary" href="#vision">Исследовать проект <span>↓</span></a>
-          <a class="button button-quiet" href="https://github.com/magapingpenim-cloud/genesis-ai" target="_blank" rel="noreferrer">Исходный код <span>↗</span></a>
+    <main class="chat-area">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenu" aria-label="Открыть меню">☰</button>
+        <div class="top-title"><span class="mobile-brand">GENESIS <i>AI</i></span><span class="desktop-title">Новый диалог</span><span class="beta">PREVIEW</span></div>
+        <button class="clear-button" id="clearChat" title="Очистить диалог">Очистить</button>
+      </header>
+
+      <section class="conversation" id="conversation" aria-live="polite">
+        <div class="welcome" id="welcome">
+          <div class="welcome-mark"><span>G</span><i></i></div>
+          <div class="eyebrow"><span class="status-dot"></span> GENESIS AI · EARLY ACCESS</div>
+          <h1>Привет. Я <em>GENESIS.</em></h1>
+          <p>Пространство для идей, вопросов и исследований.<br>С чего начнём?</p>
+          <div class="suggestions">
+            <button class="suggestion" data-prompt="Расскажи о проекте GENESIS AI"><span>✳</span><b>О проекте</b><small>Что такое GENESIS AI?</small></button>
+            <button class="suggestion" data-prompt="Помоги придумать идею"><span>↗</span><b>Найти идею</b><small>Начать с чистого листа</small></button>
+            <button class="suggestion" data-prompt="Объясни, как обучают нейросети"><span>⌘</span><b>Изучить AI</b><small>Разобраться в технологиях</small></button>
+          </div>
         </div>
-        <div class="hero-note"><span class="note-line"></span> Сейчас: ранняя исследовательская стадия</div>
-      </div>
-      <div class="hero-art" aria-label="Абстрактная визуализация цифрового мира">
-        <div class="orbit orbit-a"></div><div class="orbit orbit-b"></div>
-        <div class="core"><div class="core-inner">G</div></div>
-        <div class="art-label label-top">LOCAL COMPUTE <b>01</b></div>
-        <div class="art-label label-bottom">SPATIO-TEMPORAL ENGINE <b>02</b></div>
-        <div class="coordinates">51° 30' 26.4&quot; N<br>00° 07' 39.0&quot; W</div>
-      </div>
-      <div class="hero-bottom"><span>OWN ARCHITECTURE</span><span>LOCAL-FIRST</span><span>RESEARCH IN PROGRESS</span></div>
-    </section>
+        <div class="messages" id="messages"></div>
+      </section>
 
-    <section class="vision section wrap" id="vision">
-      <div class="section-kicker">01 / THE VISION</div>
-      <div class="vision-grid">
-        <h2>Не очередной<br><em>видеосервис.</em></h2>
-        <div class="vision-text"><p>GENESIS исследует другой путь: собственные модели, собственный код и локальное исполнение. Цель — научиться превращать текстовые описания в согласованные видеосцены с движением, пространством и кинематографическим светом.</p><p class="muted">Мы не заявляем о готовом аналоге Seedance. Это долгосрочная инженерная задача, которую будем решать эксперимент за экспериментом.</p></div>
-      </div>
-      <div class="principles">
-        <article><span>01</span><h3>Собственная архитектура</h3><p>Разрабатываем и проверяем свои компоненты генеративной системы.</p></article>
-        <article><span>02</span><h3>Локальные вычисления</h3><p>Ориентируемся на запуск и генерацию на пользовательском оборудовании.</p></article>
-        <article><span>03</span><h3>Качество прежде скорости</h3><p>Сначала визуальная точность и стабильность между кадрами.</p></article>
-      </div>
-    </section>
-
-    <section class="architecture section wrap" id="architecture">
-      <div class="section-kicker">02 / SYSTEM DESIGN</div>
-      <div class="section-heading"><h2>Из чего состоит<br><em>GENESIS.</em></h2><p>Модульная система, где каждый компонент отвечает за отдельную часть процесса создания видео.</p></div>
-      <div class="architecture-list">
-        <article><div class="module-index">01</div><div><h3>Text Understanding</h3><p>Разбор запроса: объекты, действия, окружение, камера и стиль.</p></div><span class="module-tag">LANGUAGE</span></article>
-        <article><div class="module-index">02</div><div><h3>World Representation</h3><p>Пространство сцены, геометрия, глубина и отношения между объектами.</p></div><span class="module-tag">SPATIAL</span></article>
-        <article><div class="module-index">03</div><div><h3>Motion & Temporal Engine</h3><p>Движение и согласованность персонажей, предметов и камеры во времени.</p></div><span class="module-tag">MOTION</span></article>
-        <article><div class="module-index">04</div><div><h3>Video Generation</h3><p>Исследовательская генеративная модель для создания последовательностей кадров.</p></div><span class="module-tag">GENERATIVE</span></article>
-        <article><div class="module-index">05</div><div><h3>Local Render & Export</h3><p>Эффективное использование CPU/GPU и экспорт результата в видео.</p></div><span class="module-tag">RENDER</span></article>
-      </div>
-    </section>
-
-    <section class="roadmap section wrap" id="roadmap">
-      <div class="section-kicker">03 / ROADMAP</div>
-      <div class="section-heading"><h2>От эксперимента<br><em>к видео.</em></h2><p>Двигаемся последовательно: проверяем гипотезы, измеряем результаты и только затем масштабируем модель.</p></div>
-      <div class="roadmap-grid">
-        <article class="roadmap-card current"><div class="status">CURRENT PHASE</div><div class="roadmap-number">01</div><h3>Research Core</h3><p>Базовая архитектура, диффузионный scheduler, обучающая функция и тесты.</p><span>В разработке</span></article>
-        <article class="roadmap-card"><div class="roadmap-number">02</div><h3>Data Pipeline</h3><p>Подготовка видео, подписей, лицензий и воспроизводимых наборов данных.</p><span>Запланировано</span></article>
-        <article class="roadmap-card"><div class="roadmap-number">03</div><h3>Temporal Learning</h3><p>Пространственно-временные представления и согласованность движения.</p><span>Запланировано</span></article>
-        <article class="roadmap-card"><div class="roadmap-number">04</div><h3>Local Video</h3><p>Первый локальный генератор коротких видеоклипов и дальнейшее улучшение качества.</p><span>Будущая цель</span></article>
-      </div>
-    </section>
-
-    <section class="disclaimer wrap">
-      <div class="disclaimer-icon">i</div><div><strong>Честно о текущем состоянии</strong><p>GENESIS находится на ранней стадии. В репозитории есть экспериментальный код, но обученной text-to-video модели пока нет. Качество уровня ведущих коммерческих систем потребует больших датасетов, длительного обучения и серьёзных вычислительных ресурсов.</p></div>
-    </section>
-
-    <section class="final-cta wrap">
-      <div class="section-kicker">04 / OPEN DEVELOPMENT</div>
-      <h2>Будущее создаётся<br><em>строка за строкой.</em></h2>
-      <p>Следи за разработкой, изучай архитектуру и смотри исходный код проекта.</p>
-      <a class="button button-primary" href="https://github.com/magapingpenim-cloud/genesis-ai" target="_blank" rel="noreferrer">Открыть репозиторий на GitHub <span>↗</span></a>
-    </section>
-  </main>
-
-  <footer class="footer wrap"><a class="brand" href="#"><span class="brand-mark">G</span><span>GENESIS<span class="brand-ai"> AI</span></span></a><span>Independent research project · 2026</span><a href="https://github.com/magapingpenim-cloud/genesis-ai" target="_blank" rel="noreferrer">GitHub ↗</a></footer>
+      <footer class="composer-wrap">
+        <form class="composer" id="chatForm">
+          <textarea id="messageInput" rows="1" placeholder="Напиши сообщение..." aria-label="Твоё сообщение"></textarea>
+          <div class="composer-bottom">
+            <span class="composer-hint">GENESIS AI · Локальная исследовательская платформа</span>
+            <button class="send-button" id="sendButton" type="submit" aria-label="Отправить сообщение"><span>↑</span></button>
+          </div>
+        </form>
+        <p class="disclaimer">GENESIS пока находится в разработке. Ответы модели ещё не подключены.</p>
+      </footer>
+    </main>
+  </div>
   <script src="script.js"></script>
 </body>
 </html>
