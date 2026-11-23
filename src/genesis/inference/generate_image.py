@@ -34,8 +34,12 @@ def main():
     image = torch.randn(1, 3, args.size, args.size, device=device)
     # Use a uniform subset of training timesteps for faster sampling if requested.
     indices = torch.linspace(scheduler.timesteps - 1, 0, args.steps).long().unique_consecutive()
-    for t in indices.tolist():
-        image = scheduler.step(model, image, t, prompt_ids, args.guidance, null_ids)
+    values = indices.tolist()
+    for index, t in enumerate(values):
+        previous_t = values[index + 1] if index + 1 < len(values) else -1
+        image = scheduler.ddim_step(
+            model, image, t, previous_t, prompt_ids, args.guidance, null_ids
+        )
     image = (image.clamp(-1, 1) + 1) / 2
     pixels = (image[0].permute(1, 2, 0).cpu().numpy() * 255).round().astype("uint8")
     output = Path(args.output)
