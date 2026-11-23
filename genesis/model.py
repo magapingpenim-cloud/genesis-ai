@@ -44,6 +44,17 @@ class GenesisLanguageModel(nn.Module):
         self.norm = nn.LayerNorm(c.width)
         self.output = nn.Linear(c.width, c.vocab_size, bias=False)
         self.output.weight = self.token_embedding.weight
+        self.apply(self._init_weights)
+
+    @staticmethod
+    def _init_weights(module):
+        # Small initialization keeps tied token/output embeddings numerically stable.
+        if isinstance(module, nn.Linear):
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, tokens, targets=None):
         _, length = tokens.shape
