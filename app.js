@@ -3,7 +3,6 @@ const input=document.querySelector("#prompt");
 const send=document.querySelector("#send");
 const messages=document.querySelector("#messages");
 const newChat=document.querySelector("#newChat");
-const searchToggle=document.querySelector("#webSearch");
 let busy=false;
 let history=[];
 const conversationId=()=>window.crypto?.randomUUID?.()||String(Date.now());
@@ -24,9 +23,9 @@ function addMessage(role,text,sources=[]){
 async function submitMessage(text){
   if(!text||busy)return;
   addMessage("user",text);input.value="";input.style.height="auto";busy=true;send.disabled=true;
-  const pending=addMessage("assistant",searchToggle.checked?"Проверяю вопрос и при необходимости ищу…":"Готовлю ответ…");pending.classList.add("typing");
+  const pending=addMessage("assistant","GENESIS обрабатывает сообщение…");pending.classList.add("typing");
   try{
-    const response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:text,history,conversation_id:window.genesisConversationId,web_search:searchToggle.checked})});
+    const response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:text,history,conversation_id:window.genesisConversationId})});
     const data=await response.json().catch(()=>({error:"Сервер вернул некорректный ответ."}));
     if(!response.ok)throw new Error(data.error||("Ошибка сервера: "+response.status));
     pending.classList.remove("typing");pending.textContent=data.reply||"Модель не вернула текстовый ответ.";
@@ -39,5 +38,5 @@ window.genesisConversationId=conversationId();
 form.addEventListener("submit",e=>{e.preventDefault();submitMessage(input.value.trim());});
 input.addEventListener("input",()=>{input.style.height="auto";input.style.height=Math.min(input.scrollHeight,180)+"px";send.disabled=busy||!input.value.trim();});
 input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();form.requestSubmit();}});
-newChat.addEventListener("click",()=>{messages.replaceChildren();history=[];window.genesisConversationId=conversationId();const w=document.createElement("div");w.id="welcome";w.className="welcome";w.innerHTML='<div class="hero-mark">G</div><div class="eyebrow">GENESIS AI · CONVERSATION</div><h1>Давай начнём.</h1><p>Задай вопрос или включи поиск в интернете.</p>';messages.append(w);input.focus();});
+newChat.addEventListener("click",()=>{messages.replaceChildren();history=[];window.genesisConversationId=conversationId();const w=document.createElement("div");w.id="welcome";w.className="welcome";w.innerHTML='<div class="hero-mark">G</div><div class="eyebrow">GENESIS AI · CONVERSATION</div><h1>Давай начнём.</h1><p>Просто напиши мне — я сам решу, когда искать информацию.</p>';messages.append(w);input.focus();});
 send.disabled=true;
