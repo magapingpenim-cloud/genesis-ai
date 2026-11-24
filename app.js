@@ -82,6 +82,7 @@ async function submitMessage(text){
     const data=await response.json().catch(()=>({error:"Сервер вернул некорректный ответ."}));
     if(!response.ok)throw new Error(data.error||("Ошибка сервера: "+response.status));
     pending.classList.remove("typing");pending.replaceChildren();renderFormattedText(pending,data.reply||"Модель не вернула текстовый ответ.");
+    if(data.image){const image=document.createElement("img");image.src=data.image;image.alt=text;image.className="generated-image";image.loading="lazy";pending.append(image);const download=document.createElement("a");download.href=data.image;download.download="genesis-image.png";download.textContent="Открыть / сохранить изображение";download.className="source-link";pending.append(download);}
     if(data.sources?.length){const box=document.createElement("div");box.className="sources";const heading=document.createElement("div");heading.className="sources-title";heading.textContent="ИСТОЧНИКИ";box.append(heading);data.sources.forEach(source=>{const a=document.createElement("a");a.href=source.url;a.target="_blank";a.rel="noopener noreferrer";a.textContent=source.title;a.className="source-link";box.append(a);});pending.append(box);}
     history.push({role:"user",content:text},{role:"assistant",content:data.reply||""});history=history.slice(-12);
   }catch(error){pending.closest(".message").classList.add("error");pending.classList.remove("typing");pending.textContent=error.message||"Не удалось связаться с движком.";}
