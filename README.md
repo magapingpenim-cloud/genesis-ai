@@ -14,16 +14,16 @@ GENESIS is a self-developed assistant research project. Its own decoder-only Tra
 
 ## GENESIS native brain (no Ollama or external LLM)
 
-The native model lives in `genesis_lm/`: a decoder-only Transformer trained to predict the next UTF-8 byte. The training script is tuned to start conservatively on a laptop GPU with 4 GB VRAM (width 128, 4 layers, 4 heads, batch 4, gradient accumulation 4). These are research settings, not a claim of parity with a commercial assistant.
+The native model lives in `genesis_lm/`: a decoder-only Transformer trained to predict the next token using GENESIS's own byte-level BPE tokenizer. The training script is tuned to start conservatively on a laptop GPU with 4 GB VRAM (width 128, 4 layers, 4 heads, batch 4, gradient accumulation 4). These are research settings, not a claim of parity with a commercial assistant.
 
 Prepare a training text file from the dialogue JSONL:
 ```powershell
 .venv\\Scripts\\python.exe scripts/dialogues_to_corpus.py
 ```
 
-Run a small pipeline test on the local GPU:
+Train the tokenizer on the available text first, then run a small pipeline test on the local GPU:
 ```powershell
-.venv\\Scripts\\python.exe -m genesis_lm.train --data data/corpus --steps 500 --batch-size 2 --block-size 256 --width 128 --layers 4 --heads 4 --grad-accum 4 --out checkpoints/genesis-lm.pt
+.venv\\Scripts\\python.exe -m genesis_lm.tokenizer --data data/corpus --vocab-size 1000\n.venv\\Scripts\\python.exe -m genesis_lm.train --data data/corpus --tokenizer tokenizer/genesis-bpe.json --steps 500 --batch-size 2 --block-size 256 --width 128 --layers 4 --heads 4 --grad-accum 4 --out checkpoints/genesis-lm.pt
 ```
 
 The 80-dialogue starter set is only a smoke test and will be memorized. A useful general assistant requires a much larger, legally usable, diverse corpus, evaluation on held-out questions, and several rounds of pretraining and instruction tuning. Do not interpret a falling training loss alone as intelligence.
