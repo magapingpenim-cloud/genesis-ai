@@ -1,6 +1,6 @@
 # GENESIS AI
 
-GENESIS is an early, self-written assistant prototype. It does not call ChatGPT, Ollama, or another hosted language model.
+GENESIS is an early, self-written assistant prototype. It can optionally use a local Ollama model; it does not call ChatGPT or another hosted language-model API.
 
 ## Current engine (v0.1)
 
@@ -10,11 +10,28 @@ GENESIS is an early, self-written assistant prototype. It does not call ChatGPT,
 - Automatic DuckDuckGo web search for questions the local conversation rules cannot answer.\n- Fetching and extracting readable text from up to three public result pages, with source links.\n- A compact extractive summary based on page text (not a generative LLM).\n- Public-address checks before fetching result pages to reduce SSRF exposure.
 - A minimal HTTP backend and browser chat UI.
 
-**Honest limitation:** this is not yet a trained neural network and cannot reason freely like a modern LLM. Search answers summarize passages extracted from accessible result pages; some sites block automated access, so users should open sources to verify details. The answer composer is extractive, not a reasoning language model. The next research milestone is building and training our own language model.
+**Honest limitation:** GENESIS's own small rule engine is not a general LLM. Detailed open-ended answers require Ollama and a downloaded model. Search answers summarize passages extracted from accessible result pages; some sites block automated access, so users should open sources to verify details. The answer composer is extractive, not a reasoning language model. The next research milestone is building and training our own language model.
 
-## Image generation (optional, local ComfyUI)
+## Local language model (Ollama)
 
-The chat includes an **✦ Изображение** action. It sends the prompt to a ComfyUI server running on the same machine as the GENESIS Python backend. No paid API key is required, but you must install ComfyUI and download a compatible Stable Diffusion checkpoint yourself.
+GENESIS can use a local instruction model instead of relying only on fixed phrase rules and copied search snippets.
+
+1. Install Ollama: https://ollama.com/download
+2. In PowerShell, download a compact Russian-capable model:
+   `ollama pull qwen2.5:3b`
+3. Make sure Ollama is running, then start GENESIS.
+
+By default GENESIS calls `http://127.0.0.1:11434` and uses `qwen2.5:3b`. Configure with:
+- `GENESIS_OLLAMA_URL` — Ollama server URL.
+- `GENESIS_OLLAMA_MODEL` — model tag, e.g. `qwen2.5:3b` or `qwen2.5:1.5b`.
+
+The model uses the recent chat history to answer naturally and in more detail. Questions about current events trigger web retrieval and pass retrieved page text into the model. If Ollama is unavailable, GENESIS falls back to its search-based extractive answer; it cannot provide the same reasoning quality without a language model.
+
+On an RTX 3050 Laptop with 4 GB VRAM, start with Qwen 2.5 3B quantized through Ollama. If memory is tight, try `ollama pull qwen2.5:1.5b`. Image generation and chat inference share limited GPU memory, so do not run both workloads at the same time.
+
+## Image generation (local ComfyUI, requested directly in chat)
+
+You can type a normal request such as `Нарисуй футуристический город на Марсе` directly into chat; GENESIS routes it to the image generator automatically. The **✦ Изображение** action is also available. It sends the prompt to a ComfyUI server running on the same machine as the GENESIS Python backend. No paid API key is required, but you must install ComfyUI and download a compatible Stable Diffusion checkpoint yourself.
 
 1. Install ComfyUI using its official instructions: https://docs.comfy.org/get_started
 2. Put a Stable Diffusion 1.5 checkpoint file in `ComfyUI/models/checkpoints/` (the default filename expected here is `v1-5-pruned-emaonly.safetensors`).
