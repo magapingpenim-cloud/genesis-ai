@@ -116,19 +116,19 @@ class PageTextParser(HTMLParser):
         if tag in self.SKIP:
             self.skip_depth += 1
         elif not self.skip_depth and tag in self.BLOCK:
-            self.parts.append("\\n")
+            self.parts.append("\n")
     def handle_endtag(self, tag):
         if tag in self.SKIP and self.skip_depth:
             self.skip_depth -= 1
         elif not self.skip_depth and tag in self.BLOCK:
-            self.parts.append("\\n")
+            self.parts.append("\n")
     def handle_data(self, data):
         if not self.skip_depth:
-            clean = re.sub(r"\\s+", " ", data).strip()
+            clean = re.sub(r"\s+", " ", data).strip()
             if clean:
                 self.parts.append(clean)
     def text(self):
-        return re.sub(r"\\n{3,}", "\\n\\n", " ".join(self.parts)).strip()
+        return re.sub(r"\n{3,}", "\n\n", " ".join(self.parts)).strip()
 
 
 def _public_http_url(url):
@@ -181,9 +181,9 @@ def search_web(query, limit=5):
         if link.startswith("http") and link not in seen and item["title"] and _public_http_url(link):
             seen.add(link)
             results.append({
-                "title": re.sub(r"\\s+", " ", item["title"]).strip(),
+                "title": re.sub(r"\s+", " ", item["title"]).strip(),
                 "url": link,
-                "snippet": re.sub(r"\\s+", " ", item["snippet"]).strip(),
+                "snippet": re.sub(r"\s+", " ", item["snippet"]).strip(),
                 "content": ""
             })
         if len(results) >= limit:
@@ -207,12 +207,12 @@ def compose_search_answer(query, sources):
     for item in usable[:3]:
         body = item.get("content") or item.get("snippet", "")
         # Keep a compact passage instead of dumping an entire page.
-        sentences = re.split(r"(?<=[.!?])\\s+", body)
+        sentences = re.split(r"(?<=[.!?])\s+", body)
         useful = [s.strip() for s in sentences if len(s.strip()) > 45]
         passage = " ".join(useful[:2]) if useful else body[:650]
-        lines.append("**" + item["title"] + "**\\n" + passage[:850])
-    lines.append("\\nСводка составлена по тексту доступных страниц. Ссылки на источники — ниже.")
-    return "\\n\\n".join(lines)
+        lines.append("**" + item["title"] + "**\n" + passage[:850])
+    lines.append("\nСводка составлена по тексту доступных страниц. Ссылки на источники — ниже.")
+    return "\n\n".join(lines)
 
 
 def answer_locally(message, history=None):
