@@ -13,6 +13,7 @@ import json
 import os
 import re
 import html
+from genesis.knowledge import answer_from_knowledge
 
 ROOT = Path(__file__).resolve().parent
 PORT = int(os.environ.get("PORT", "80"))
@@ -213,6 +214,11 @@ def answer_locally(message, history=None):
         return "GENESIS — наш собственный экспериментальный проект. Его программную логику и интерфейс мы разрабатываем сами.", "conversation"
     if re.search(r"\b(ты настоящий|ты живой|у тебя есть чувства)\b", lower):
         return "Я не человек и не обладаю сознанием или чувствами. Я программа, которая обрабатывает сообщения и формирует ответы.", "conversation"
+
+    # Search the local curated knowledge base before sending unknown questions to web search.
+    local_knowledge = answer_from_knowledge(text)
+    if local_knowledge is not None:
+        return local_knowledge
 
     return None, "needs_search"
 
