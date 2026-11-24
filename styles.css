@@ -10,3 +10,11 @@
 .bubble strong{color:#c9f5df;font-weight:700}
 .bubble em{color:#b9d8c7}
 .bubble code{background:#18251e;border:1px solid #2b4335;border-radius:5px;padding:1px 5px;color:#baf1d2}
+
+/* Image generation controls and result */
+.composer-actions{display:flex;align-items:center;gap:9px}
+.image-button{height:34px;padding:0 12px;border:1px solid #426b58;border-radius:10px;background:#14251c;color:#b9f2d5;font:inherit;font-size:11px;cursor:pointer}
+.image-button:hover{background:#1c3528;border-color:#78b99a}
+.image-button:disabled{opacity:.45;cursor:wait}
+.generated-image{display:block;width:min(100%,512px);height:auto;margin:12px 0;border:1px solid #345343;border-radius:14px;background:#111916}
+@media(max-width:600px){.image-button{padding:0 9px;font-size:10px}.composer-actions{gap:6px}}
