@@ -56,16 +56,19 @@ def main():
             vals.append(loss.item())
         model.train(); return sum(vals)/len(vals)
     started=time.time()
+    optimizer.zero_grad(set_to_none=True)
     for step in range(1,a.steps+1):
         x,y=batch(train_data)
-        if (step-1) % a.grad_accum == 0: optimizer.zero_grad(set_to_none=True)
         with torch.autocast(device_type="cuda",dtype=torch.float16,enabled=device=="cuda"):
             _,loss=model(x,y)
         scaler.scale(loss / a.grad_accum).backward()
-        if step % a.grad_accum == 0 or step == a.steps:
+        update_now = (step % a.grad_accum == 0) or (step == a.steps)
+        if update_now:
             scaler.unscale_(optimizer)
-        torch.nn.utils.clip_grad_norm_(model.parameters(),1.0)
-        scaler.step(optimizer); scaler.update(); optimizer.zero_grad(set_to_none=True)
+            torch.nn.utils.clip_grad_norm_(model.parameters(),1.0)
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad(set_to_none=True)
         if step==1 or step%a.eval_every==0 or step==a.steps:
             val=evaluate()
             print(f"step={step} train_loss={loss.item():.4f} val_loss={val:.4f} val_perplexity={math.exp(min(val,20)):.2f} elapsed={time.time()-started:.1f}s",flush=True)
