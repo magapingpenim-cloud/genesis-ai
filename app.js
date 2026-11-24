@@ -3,6 +3,7 @@ const input=document.querySelector("#prompt");
 const send=document.querySelector("#send");
 const messages=document.querySelector("#messages");
 const newChat=document.querySelector("#newChat");
+const imageGenerate=document.querySelector("#imageGenerate");
 let busy=false;
 let history=[];
 const conversationId=()=>window.crypto?.randomUUID?.()||String(Date.now());
@@ -52,6 +53,26 @@ function addMessage(role,text,sources=[]){
   }
   messages.append(row);messages.scrollTop=messages.scrollHeight;return bubble;
 }
+async function generateImage(){
+  const prompt=input.value.trim();
+  if(!prompt||busy)return;
+  addMessage("user","Создай изображение: "+prompt);
+  input.value="";input.style.height="auto";busy=true;send.disabled=true;imageGenerate.disabled=true;
+  const pending=addMessage("assistant","GENESIS создаёт изображение…");
+  pending.classList.add("typing");
+  try{
+    const response=await fetch("/api/generate-image",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt})});
+    const data=await response.json().catch(()=>({error:"Сервер вернул некорректный ответ."}));
+    if(!response.ok)throw new Error(data.error||("Ошибка генерации: "+response.status));
+    pending.classList.remove("typing");pending.replaceChildren();
+    const caption=document.createElement("p");caption.textContent="Готово! Вот что получилось:";pending.append(caption);
+    const image=document.createElement("img");image.src=data.image_url;image.alt=prompt;image.className="generated-image";image.loading="lazy";pending.append(image);
+    const download=document.createElement("a");download.href=data.image_url;download.download="genesis-image.png";download.textContent="Открыть / сохранить изображение";download.className="source-link";pending.append(download);
+    history.push({role:"user",content:"Создай изображение: "+prompt},{role:"assistant",content:"Изображение создано по запросу: "+prompt});history=history.slice(-12);
+  }catch(error){
+    pending.closest(".message").classList.add("error");pending.classList.remove("typing");pending.textContent=error.message||"Не удалось создать изображение.";
+  }finally{busy=false;imageGenerate.disabled=false;send.disabled=!input.value.trim();messages.scrollTop=messages.scrollHeight;input.focus();}
+}
 async function submitMessage(text){
   if(!text||busy)return;
   addMessage("user",text);input.value="";input.style.height="auto";busy=true;send.disabled=true;
@@ -68,6 +89,7 @@ async function submitMessage(text){
 }
 window.genesisConversationId=conversationId();
 form.addEventListener("submit",e=>{e.preventDefault();submitMessage(input.value.trim());});
+imageGenerate.addEventListener("click",generateImage);
 input.addEventListener("input",()=>{input.style.height="auto";input.style.height=Math.min(input.scrollHeight,180)+"px";send.disabled=busy||!input.value.trim();});
 input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();form.requestSubmit();}});
 newChat.addEventListener("click",()=>{messages.replaceChildren();history=[];window.genesisConversationId=conversationId();const w=document.createElement("div");w.id="welcome";w.className="welcome";w.innerHTML='<div class="hero-mark">G</div><div class="eyebrow">GENESIS AI · CONVERSATION</div><h1>Давай начнём.</h1><p>Просто напиши мне — я сам решу, когда искать информацию.</p>';messages.append(w);input.focus();});
