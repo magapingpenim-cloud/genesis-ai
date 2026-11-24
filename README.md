@@ -1,6 +1,6 @@
 # GENESIS AI
 
-GENESIS is an early, self-developed assistant prototype. Its conversation rules, knowledge base, search pipeline, and neural-network experiments are developed in this repository. It does not use Ollama, Qwen, ChatGPT, or another external language model.
+GENESIS is a self-developed assistant research project. Its own decoder-only Transformer, tokenizer experiments, training pipeline, conversation rules, knowledge base, and web retrieval are developed in this repository. It does not use Ollama, Qwen, ChatGPT, or another external language model.
 
 ## Current engine (v0.1)
 
@@ -11,6 +11,24 @@ GENESIS is an early, self-developed assistant prototype. Its conversation rules,
 - A minimal HTTP backend and browser chat UI.
 
 **Honest limitation:** GENESIS's own small rule engine is not a general LLM. Detailed open-ended answers require further development and training of GENESIS's own language model. Search answers summarize passages extracted from accessible result pages; some sites block automated access, so users should open sources to verify details. The answer composer is extractive, not a reasoning language model. The main research milestone is building and training GENESIS's own language model.
+
+## GENESIS native brain (no Ollama or external LLM)
+
+The native model lives in `genesis_lm/`: a decoder-only Transformer trained to predict the next UTF-8 byte. The training script is tuned to start conservatively on a laptop GPU with 4 GB VRAM (width 128, 4 layers, 4 heads, batch 4, gradient accumulation 4). These are research settings, not a claim of parity with a commercial assistant.
+
+Prepare a training text file from the dialogue JSONL:
+```powershell
+.venv\\Scripts\\python.exe scripts/dialogues_to_corpus.py
+```
+
+Run a small pipeline test on the local GPU:
+```powershell
+.venv\\Scripts\\python.exe -m genesis_lm.train --data data/corpus --steps 500 --batch-size 2 --block-size 256 --width 128 --layers 4 --heads 4 --grad-accum 4 --out checkpoints/genesis-lm.pt
+```
+
+The 80-dialogue starter set is only a smoke test and will be memorized. A useful general assistant requires a much larger, legally usable, diverse corpus, evaluation on held-out questions, and several rounds of pretraining and instruction tuning. Do not interpret a falling training loss alone as intelligence.
+
+The inference interface is `genesis_lm/assistant.py`. It loads only `checkpoints/genesis-lm.pt`, which must be trained locally first. The browser app does not silently call any external model.
 
 ## Image generation (local ComfyUI, requested directly in chat)
 
