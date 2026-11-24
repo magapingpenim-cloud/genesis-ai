@@ -2,7 +2,7 @@
 
 The chat now checks a small reviewed local Russian knowledge corpus before falling back to web search.
 
-- Corpus: `data/knowledge/ru_core.jsonl`
+- Corpus: `data/knowledge/ru_core.jsonl` (140 reviewed starter entries across school subjects, science, history, computing, safety, sport and practical skills)
 - Retrieval: `genesis/knowledge.py` (transparent token-overlap/IDF ranking)
 - Chat integration: `app.py`
 - Smoke test: `scripts/test_knowledge.py`
