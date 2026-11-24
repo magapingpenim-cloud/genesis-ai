@@ -39,8 +39,8 @@ class GenesisBrain:
         prompt = (
             "Ты GENESIS, русскоязычный ИИ-помощник. Отвечай понятно и по делу. "
             "Не выдумывай факты.\n\n"
-            + "\\n".join(f"{role}: {content}" for role, content in turns)
-            + "\\nGENESIS:"
+            + "\n".join(f"{role}: {content}" for role, content in turns)
+            + "\nGENESIS:"
         )
         raw = prompt.encode("utf-8")
         raw = raw[-self.model.block_size:]
@@ -48,7 +48,7 @@ class GenesisBrain:
         generated = self.model.generate(tokens, max_new_tokens=max_new_tokens,
                                         temperature=0.75, top_k=40)
         result = bytes(generated[0, tokens.shape[1]:].tolist()).decode("utf-8", errors="ignore")
-        for marker in ("\\nПользователь:", "\\nТы:", "\\n###"):
+        for marker in ("\nПользователь:", "\nТы:", "\n###"):
             if marker in result:
                 result = result.split(marker, 1)[0]
         return result.strip()
