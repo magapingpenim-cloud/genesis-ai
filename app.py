@@ -15,6 +15,7 @@ import re
 import html
 import ipaddress
 import socket
+import time
 from genesis.knowledge import answer_from_knowledge
 
 ROOT = Path(__file__).resolve().parent
@@ -195,25 +196,97 @@ def search_web(query, limit=5):
 
 
 def compose_search_answer(query, sources):
-    """Build a source-grounded extractive summary; this is not an LLM."""
+    """Create a longer, query-relevant extractive brief from retrieved pages."""
     if not sources:
-        return ("Я выполнил поиск, но не получил подходящих результатов. "
-                "Попробуй переформулировать запрос или повторить позже.")
+        return ("Поиск не вернул подходящих результатов. Попробуй уточнить запрос "
+                "или повторить его чуть позже.")
     usable = [item for item in sources if item.get("content") or item.get("snippet")]
     if not usable:
-        return ("Поиск нашёл страницы, но не смог прочитать их содержимое. "
-                "Открой источники ниже или попробуй другой запрос.")
-    lines = ["## Что удалось найти"]
+        return ("Поиск нашёл страницы, но сайты не разрешили прочитать их содержимое. "
+                "Открой ссылки на источники ниже.")
+    query_terms = set(re.findall(r"[a-zа-яё0-9]{3,}", query.lower()))
+    lines = ["## Подробный ответ", "Я проверил найденные страницы и собрал наиболее полезные фрагменты."]
+    included = 0
     for item in usable[:3]:
         body = item.get("content") or item.get("snippet", "")
-        # Keep a compact passage instead of dumping an entire page.
-        sentences = re.split(r"(?<=[.!?])\s+", body)
-        useful = [s.strip() for s in sentences if len(s.strip()) > 45]
-        passage = " ".join(useful[:2]) if useful else body[:650]
-        lines.append("**" + item["title"] + "**\n" + passage[:850])
-    lines.append("\nСводка составлена по тексту доступных страниц. Ссылки на источники — ниже.")
+        sentences = [re.sub(r"\s+", " ", s).strip() for s in re.split(r"(?<=[.!?])\s+", body)]
+        candidates = []
+        for sentence in sentences:
+            if len(sentence) < 45:
+                continue
+            words = set(re.findall(r"[a-zа-яё0-9]{3,}", sentence.lower()))
+            candidates.append((len(words & query_terms), sentence))
+        candidates.sort(key=lambda pair: pair[0], reverse=True)
+        selected, seen = [], set()
+        for _, sentence in candidates:
+            key = sentence[:100].lower()
+            if key not in seen:
+                seen.add(key)
+                selected.append(sentence)
+            if len(selected) >= 4:
+                break
+        if not selected and body:
+            selected = [body[:700]]
+        if selected:
+            lines.append("### " + item["title"])
+            lines.extend("- " + sentence[:650] for sentence in selected)
+            included += len(selected)
+    if not included:
+        return "Я нашёл страницы, но не смог извлечь из них достаточно содержательного текста. Проверь источники ниже."
+    lines.extend([
+        "## Важный момент",
+        "Это подробная выжимка из доступных страниц, а не независимое подтверждение каждого утверждения. "
+        "Если источники расходятся или тема быстро меняется, сверяй даты и первоисточники.",
+        "## Источники",
+        "Ссылки на страницы, которые удалось найти, находятся под ответом."
+    ])
     return "\n\n".join(lines)
 
+
+def generate_with_comfyui(prompt):
+    """Generate one image through a local ComfyUI server; no cloud key required."""
+    prompt = str(prompt or "").strip()
+    if not prompt or len(prompt) > 1800:
+        raise ValueError("Опиши изображение (до 1800 символов).")
+    base = os.environ.get("GENESIS_COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
+    checkpoint = os.environ.get("GENESIS_SD_CHECKPOINT", "v1-5-pruned-emaonly.safetensors")
+    workflow = {
+        "1": {"class_type":"CheckpointLoaderSimple","inputs":{"ckpt_name":checkpoint}},
+        "2": {"class_type":"CLIPTextEncode","inputs":{"text":prompt,"clip":["1",1]}},
+        "3": {"class_type":"CLIPTextEncode","inputs":{"text":"low quality, blurry, distorted, bad anatomy, text, watermark","clip":["1",1]}},
+        "4": {"class_type":"EmptyLatentImage","inputs":{"width":512,"height":512,"batch_size":1}},
+        "5": {"class_type":"KSampler","inputs":{"seed":int(time.time()*1000)%2147483647,"steps":20,"cfg":7.0,"sampler_name":"euler","scheduler":"normal","denoise":1.0,"model":["1",0],"positive":["2",0],"negative":["3",0],"latent_image":["4",0]}},
+        "6": {"class_type":"VAEDecode","inputs":{"samples":["5",0],"vae":["1",2]}},
+        "7": {"class_type":"SaveImage","inputs":{"filename_prefix":"genesis","images":["6",0]}}
+    }
+    def request_json(url, data=None, timeout=15):
+        request = Request(url, data=data, headers={"Content-Type":"application/json"} if data is not None else {})
+        with urlopen(request, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+    try:
+        queued = request_json(base + "/prompt", json.dumps({"prompt":workflow}).encode("utf-8"))
+    except (OSError, URLError, HTTPError, TimeoutError) as error:
+        raise RuntimeError("Не удалось подключиться к ComfyUI. Запусти ComfyUI на этом компьютере (порт 8188).") from error
+    prompt_id = queued.get("prompt_id")
+    if not prompt_id:
+        raise RuntimeError("ComfyUI не принял задачу: " + str(queued.get("error", queued))[:500])
+    deadline = time.time() + 180
+    while time.time() < deadline:
+        time.sleep(1)
+        try:
+            history = request_json(base + "/history/" + prompt_id, timeout=10)
+        except (OSError, ValueError, URLError):
+            continue
+        record = history.get(prompt_id, {})
+        images = record.get("outputs", {}).get("7", {}).get("images", [])
+        if images:
+            image = images[0]
+            return {"image_url":"/api/comfy-image?"+urlencode({
+                "filename":image.get("filename",""),"subfolder":image.get("subfolder",""),
+                "type":image.get("type","output")}),"prompt":prompt}
+        if record.get("status", {}).get("status_str") == "error":
+            raise RuntimeError("ComfyUI завершил генерацию с ошибкой. Проверь модель и консоль ComfyUI.")
+    raise RuntimeError("Генерация заняла слишком много времени. Проверь очередь ComfyUI.")
 
 def answer_locally(message, history=None):
     """Conversational rules; unknown factual questions are routed to web search."""
@@ -307,10 +380,34 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        path = self.path.split("?", 1)[0]
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path == "/api/comfy-image":
+            params = parse_qs(parsed.query)
+            filename = params.get("filename", [""])[0]
+            subfolder = params.get("subfolder", [""])[0]
+            image_type = params.get("type", ["output"])[0]
+            if not filename or filename != os.path.basename(filename) or subfolder or image_type != "output":
+                return self.send_error(400)
+            base = os.environ.get("GENESIS_COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
+            try:
+                url = base + "/view?" + urlencode({"filename":filename,"subfolder":"","type":"output"})
+                with urlopen(Request(url), timeout=20) as response:
+                    data = response.read(12_000_000)
+                    content_type = response.headers.get("Content-Type", "image/png")
+                self.send_response(200)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            except (OSError, URLError, TimeoutError):
+                return self.send_error(502)
         if path == "/api/health":
-            return self.send_json(200, {"status": "ok", "engine": "GENESIS-native-v0.3",
-                                        "model": "none", "web_search": True})
+            return self.send_json(200, {"status": "ok", "engine": "GENESIS-native-v0.4",
+                                        "model": "none", "web_search": True,
+                                        "image_generation": "ComfyUI (optional, local)"})
         if path == "/":
             path = "/index.html"
         target = (ROOT / path.lstrip("/")).resolve()
@@ -330,6 +427,21 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_POST(self):
+        if self.path == "/api/generate-image":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length < 1 or length > 8000:
+                    return self.send_json(413, {"error":"Запрос слишком большой или пустой."})
+                payload = json.loads(self.rfile.read(length))
+                result = generate_with_comfyui(payload.get("prompt", ""))
+                return self.send_json(200, result)
+            except ValueError as error:
+                return self.send_json(400, {"error":str(error)})
+            except RuntimeError as error:
+                return self.send_json(503, {"error":str(error)})
+            except Exception as error:
+                print("GENESIS image error:", repr(error), flush=True)
+                return self.send_json(500, {"error":"Не удалось создать изображение."})
         if self.path != "/api/chat":
             return self.send_error(404)
         try:
