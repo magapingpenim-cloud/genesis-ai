@@ -1,12 +1,4 @@
-"""Build a deduplicated UTF-8 training corpus from local text and JSONL files.
-
-Supported inputs:
-- .txt and .md files
-- .jsonl rows with "text" or "content"
-- .jsonl rows with "messages": [{"role": "...", "content": "..."}]
-
-Only include data you have permission to use for model training.
-"""
+"""Build a deduplicated text corpus from permitted local UTF-8 sources."""
 import argparse
 import hashlib
 import json
@@ -27,17 +19,22 @@ def extract_jsonl(path: Path):
         if isinstance(item, str):
             yield item
         elif isinstance(item, dict):
-            value = item.get("text") or item.get("content")
-            if isinstance(value, str):
-                yield value
             messages = item.get("messages")
             if isinstance(messages, list):
+                dialogue = []
                 for message in messages:
                     if isinstance(message, dict) and isinstance(message.get("content"), str):
-                        role = str(message.get("role", ""))
+                        role = str(message.get("role", "user")).strip().lower()
                         content = message["content"].strip()
                         if content:
-                            yield f"{role}: {content}" if role else content
+                            label = "GENESIS" if role in {"assistant", "genesis"} else "Пользователь"
+                            dialogue.append(f"{label}: {content}")
+                if dialogue:
+                    yield "\n".join(dialogue)
+            else:
+                value = item.get("text") or item.get("content")
+                if isinstance(value, str):
+                    yield value
 
 
 def collect_text(input_dir: Path):
@@ -57,45 +54,36 @@ def collect_text(input_dir: Path):
 
 def main():
     parser = argparse.ArgumentParser(description="Prepare a local GENESIS text corpus")
-    parser.add_argument("--input", default="data/raw", help="Folder containing permitted source files")
+    parser.add_argument("--input", default="data/raw")
     parser.add_argument("--output", default="data/corpus.txt")
-    parser.add_argument("--min-chars", type=int, default=40)
+    parser.add_argument("--min-chars", type=int, default=20)
     args = parser.parse_args()
 
     source_dir = Path(args.input)
     output_path = Path(args.output)
     if not source_dir.exists():
-        raise SystemExit(
-            f"Input folder not found: {source_dir}. Create it and add .txt, .md, or .jsonl files."
-        )
-
-    seen = set()
-    chunks = []
+        raise SystemExit(f"Input folder not found: {source_dir}. Create it and add text files.")
+    seen, chunks = set(), []
     source_count = 0
     for text in collect_text(source_dir):
         source_count += 1
-        normalized = " ".join(text.split())
+        normalized = text.replace("\r\n", "\n").strip()
         if len(normalized) < args.min_chars:
             continue
         digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-        if digest in seen:
-            continue
-        seen.add(digest)
-        chunks.append(normalized)
+        if digest not in seen:
+            seen.add(digest)
+            chunks.append(normalized)
 
     if not chunks:
-        raise SystemExit("No usable text found. Add permitted text files or supported JSONL data.")
-
+        raise SystemExit("No usable text found. Add permitted UTF-8 text or JSONL dialogue files.")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("\n\n".join(chunks) + "\n", encoding="utf-8")
-    char_count = sum(len(chunk) for chunk in chunks)
-    byte_count = output_path.stat().st_size
     print(f"Input records/files read: {source_count}")
     print(f"Unique text chunks: {len(chunks)}")
-    print(f"Characters: {char_count:,}")
-    print(f"Output bytes: {byte_count:,}")
+    print(f"Characters: {sum(len(chunk) for chunk in chunks):,}")
+    print(f"Output bytes: {output_path.stat().st_size:,}")
     print(f"Saved: {output_path}")
-    print("Reminder: a clean corpus is not automatically a question-answer dataset or a capable assistant.")
 
 
 if __name__ == "__main__":
