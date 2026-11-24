@@ -266,14 +266,25 @@ class Handler(BaseHTTPRequestHandler):
             message = str(payload.get("message", "")).strip()
             if not message:
                 return self.send_json(400, {"error": "Напиши сообщение."})
-            answer, engine = answer_locally(message)
+            history = payload.get("history", [])
+            history = history if isinstance(history, list) else []
+            previous_user = next((item.get("content", "")[:500]
+                                  for item in reversed(history[-12:])
+                                  if isinstance(item, dict) and item.get("role") == "user"
+                                  and isinstance(item.get("content"), str)), "")
+            follow_up = bool(re.match(
+                r"^(почему|зачем|подробнее|расскажи подробнее|что дальше|и что|а потом|что это значит|продолжай)\\b",
+                message.lower().strip()
+            ))
+            contextual_query = (previous_user + " " + message).strip() if follow_up and previous_user else message
+            answer, engine = answer_locally(message, history)
             sources = []
             # Local skills (greetings, identity, calculator) always run first.
             # Web search is only used when local rules cannot answer the question.
             if answer is None:
                 try:
-                    sources = search_web(message)
-                    answer = compose_search_answer(message, sources)
+                    sources = search_web(contextual_query)
+                    answer = compose_search_answer(contextual_query, sources)
                     engine = "GENESIS-search-v0.1"
                 except (HTTPError, URLError, TimeoutError) as error:
                     print("Search failed:", repr(error), flush=True)
