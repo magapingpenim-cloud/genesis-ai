@@ -37,3 +37,24 @@ The earlier byte-level checkpoint is incompatible with this vocabulary and must 
 
 ## Limitations
 The current objective is next-character prediction over concatenated text, not instruction fine-tuning. The model does not yet understand questions reliably, browse the web, or have pretrained knowledge. A tiny corpus only tests that the pipeline works; useful conversational behavior requires a large, varied, carefully licensed corpus and a separate instruction/dialogue training stage. Character-level models are inefficient for long text; a subword tokenizer is a later milestone.
+
+
+## Assistant-only dialogue training (new milestone)
+
+The supervised dialogue trainer reads `data/raw/dialogues.jsonl` directly. It builds the same Unicode character vocabulary approach and masks the loss on user-message characters: the model is optimized to predict assistant-response characters only.
+
+Run from the repository root:
+```powershell
+.\.venv\Scripts\python.exe -m genesis.train_dialogue --steps 300 --batch-size 2 --output checkpoints/genesis-dialogue.pt
+```
+
+Generate from a dialogue-style prompt using the matching checkpoint:
+```powershell
+.\.venv\Scripts\python.exe -m genesis.generate --checkpoint checkpoints/genesis-dialogue.pt --prompt "Пользователь: Привет!\nGENESIS: " --tokens 100 --temperature 0.4
+```
+
+Important:
+- This creates a separate checkpoint; it does not overwrite `genesis-char.pt`.
+- The vocabulary is built from the dialogue file and stored in that checkpoint. If the dialogue dataset changes, retrain and use the newly produced checkpoint.
+- The current prototype uses character-level prediction and a small context window. Five examples are only a pipeline smoke test; the model can memorize them and will not generalize reliably.
+- The training mask teaches the model to predict assistant text only. It does not by itself create reasoning, factual knowledge, safety behavior, or web search.
