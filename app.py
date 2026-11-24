@@ -527,7 +527,10 @@ class Handler(BaseHTTPRequestHandler):
             # Natural-language image requests work directly in the chat; no separate button required.
             if is_image_request(message):
                 image_prompt = extract_image_prompt(message)
-                result = generate_with_comfyui(image_prompt)
+                try:
+                    result = generate_with_comfyui(image_prompt)
+                except RuntimeError as error:
+                    return self.send_json(503, {"error":str(error)})
                 return self.send_json(200, {"reply":"Изображение готово!\\n\\n**Описание:** " + image_prompt,
                                             "image":result.get("image_url"),"sources":[],"engine":"GENESIS-image"})
             sources = []
