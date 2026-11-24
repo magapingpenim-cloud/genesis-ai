@@ -307,48 +307,6 @@ def extract_image_prompt(message):
     return text or str(message).strip()
 
 
-def chat_with_ollama(message, history=None, web_context=None):
-    """Use a locally hosted open model for natural, contextual answers."""
-    base = os.environ.get("GENESIS_OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
-    model = os.environ.get("GENESIS_OLLAMA_MODEL", "qwen2.5:3b")
-    system = (
-        "Ты GENESIS — полезный русскоязычный ИИ-помощник. Отвечай естественно, "
-        "содержательно и по существу. Для сложных вопросов объясняй понятиями, "
-        "примерами и шагами; не ограничивайся одной фразой, если просят подробности. "
-        "Учитывай историю диалога и понимай короткие уточнения. Не выдумывай факты, "
-        "ссылки или результаты поиска. Если не уверен — прямо скажи. Используй Markdown "
-        "с заголовками и списками только когда это помогает. Отвечай на языке пользователя."
-    )
-    if web_context:
-        system += (
-            "\\n\\nНиже реальные выдержки из найденных веб-страниц. Используй их как "
-            "контекст, сопоставляй данные, не утверждай того, чего в них нет:\\n" + web_context[:14000]
-        )
-    messages = [{"role":"system","content":system}]
-    for item in (history or [])[-10:]:
-        if isinstance(item, dict) and item.get("role") in ("user","assistant") and isinstance(item.get("content"),str):
-            messages.append({"role":item["role"],"content":item["content"][:4000]})
-    messages.append({"role":"user","content":str(message)[:6000]})
-    body = json.dumps({"model":model,"messages":messages,"stream":False,
-                       "options":{"temperature":0.65,"num_ctx":4096}}).encode("utf-8")
-    request = Request(base + "/api/chat", data=body, headers={"Content-Type":"application/json"})
-    try:
-        with urlopen(request, timeout=120) as response:
-            result = json.loads(response.read().decode("utf-8"))
-        answer = result.get("message",{}).get("content","").strip()
-        return answer or None
-    except (HTTPError, URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError):
-        return None
-
-
-def build_web_context(sources):
-    chunks = []
-    for source in sources[:5]:
-        body = source.get("content") or source.get("snippet") or ""
-        if body:
-            chunks.append("SOURCE: " + source.get("title","") + "\\n" + body[:3500])
-    return "\\n\\n".join(chunks)
-
 def answer_locally(message, history=None):
     """Conversational rules; unknown factual questions are routed to web search."""
     text = message.strip()
@@ -535,32 +493,19 @@ class Handler(BaseHTTPRequestHandler):
                                             "image":result.get("image_url"),"sources":[],"engine":"GENESIS-image"})
             sources = []
             answer, engine = answer_locally(message, history)
-            # Fixed FAQ snippets are too shallow: let the language model explain these topics fully.
-            if engine in ("GENESIS-scripted-faq",):
-                answer, engine = None, "GENESIS-local-LLM"
-            # Search current/fast-changing questions first, then let the local LLM synthesize.
-            needs_fresh_info = bool(re.search(
-                r"(?i)\\b(сейчас|сегодня|последн|новост|актуальн|на данный момент|курс|цена|стоимость|погода|результат матча|кто выиграл)\\w*\\b",
-                contextual_query
-            ))
-            if answer is None and needs_fresh_info:
+            # Our own conversation rules and knowledge base run first.
+            # Unknown questions use web search; no external language model is called.
+            if answer is None:
                 try:
                     sources = search_web(contextual_query, limit=6)
+                    answer = compose_search_answer(contextual_query, sources)
+                    engine = "GENESIS-search"
                 except (HTTPError, URLError, TimeoutError, OSError) as error:
                     print("Search failed:", repr(error), flush=True)
-            if answer is None:
-                web_context = build_web_context(sources)
-                answer = chat_with_ollama(contextual_query, history, web_context)
-                if answer:
-                    engine = "GENESIS-local-LLM"
-                else:
-                    if not sources:
-                        try:
-                            sources = search_web(contextual_query, limit=6)
-                        except (HTTPError, URLError, TimeoutError, OSError) as error:
-                            print("Search failed:", repr(error), flush=True)
-                    answer = compose_search_answer(contextual_query, sources)
-                    engine = "GENESIS-search-fallback"
+                    answer = ("Сейчас не удалось получить данные из интернета. "
+                              "Попробуй повторить запрос позже или переформулировать его. "
+                              "Я не буду придумывать ответ без источников.")
+                    engine = "GENESIS-search-unavailable"
             public_sources = [{"title": item.get("title", ""), "url": item.get("url", "")} for item in sources if item.get("title") and item.get("url")]
             return self.send_json(200, {"reply": answer, "sources": public_sources, "image":None, "engine": engine})
         except (ValueError, json.JSONDecodeError):
