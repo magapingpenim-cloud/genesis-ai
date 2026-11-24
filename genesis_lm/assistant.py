@@ -2,6 +2,7 @@
 from pathlib import Path
 import torch
 from genesis_lm.model import GenesisLM
+from genesis_lm.tokenizer import GenesisBPETokenizer
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CHECKPOINT = ROOT / "checkpoints" / "genesis-lm.pt"
@@ -19,11 +20,13 @@ class GenesisBrain:
         config = saved["config"]
         self.model = GenesisLM(
             width=config["width"], layers=config["layers"], heads=config["heads"],
-            block_size=config["block_size"], dropout=0.0
+            block_size=config["block_size"], dropout=0.0, vocab_size=config.get("vocab_size", 256)
         ).to(self.device)
         self.model.load_state_dict(saved["model"])
         self.model.eval()
         self.step = int(saved.get("step", 0))
+        tokenizer_path = saved.get("tokenizer_path", "tokenizer/genesis-bpe.json")
+        self.tokenizer = GenesisBPETokenizer.load(ROOT / tokenizer_path)
 
     @torch.inference_mode()
     def answer(self, message, history=None, max_new_tokens=420):
@@ -42,12 +45,12 @@ class GenesisBrain:
             + "\n".join(f"{role}: {content}" for role, content in turns)
             + "\nGENESIS:"
         )
-        raw = prompt.encode("utf-8")
-        raw = raw[-self.model.block_size:]
-        tokens = torch.tensor(list(raw), dtype=torch.long, device=self.device)[None, :]
+        encoded = self.tokenizer.encode(prompt)
+        encoded = encoded[-self.model.block_size:]
+        tokens = torch.tensor(encoded, dtype=torch.long, device=self.device)[None, :]
         generated = self.model.generate(tokens, max_new_tokens=max_new_tokens,
                                         temperature=0.75, top_k=40)
-        result = bytes(generated[0, tokens.shape[1]:].tolist()).decode("utf-8", errors="ignore")
+        result = self.tokenizer.decode(generated[0, tokens.shape[1]:].tolist())
         for marker in ("\nПользователь:", "\nТы:", "\n###"):
             if marker in result:
                 result = result.split(marker, 1)[0]
