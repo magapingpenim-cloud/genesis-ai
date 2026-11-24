@@ -273,7 +273,7 @@ class Handler(BaseHTTPRequestHandler):
                                   if isinstance(item, dict) and item.get("role") == "user"
                                   and isinstance(item.get("content"), str)), "")
             follow_up = bool(re.match(
-                r"^(почему|зачем|подробнее|расскажи подробнее|что дальше|и что|а потом|что это значит|продолжай)\\b",
+                r"^(почему|зачем|подробнее|расскажи подробнее|что дальше|и что|а потом|что это значит|продолжай)\b",
                 message.lower().strip()
             ))
             contextual_query = (previous_user + " " + message).strip() if follow_up and previous_user else message
