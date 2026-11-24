@@ -32,12 +32,12 @@ def main():
                 label = "Пользователь" if role == "user" else "GENESIS"
                 parts.append(f"{label}: {content.strip()}")
         if parts:
-            rows.append("\\n".join(parts))
+            rows.append("\n".join(parts))
     if not rows:
         raise SystemExit("No usable conversations found.")
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text("\\n\\n".join(rows) + "\\n", encoding="utf-8")
+    output.write_text("\n\n".join(rows) + "\n", encoding="utf-8")
     print(f"Conversations: {len(rows)}")
     print(f"Corpus: {output} ({output.stat().st_size:,} bytes)")
     print("Note: this is only a pipeline smoke-test corpus, not enough to create a capable general assistant.")
