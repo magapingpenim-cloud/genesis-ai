@@ -13,6 +13,8 @@ import json
 import os
 import re
 import html
+import ipaddress
+import socket
 from genesis.knowledge import answer_from_knowledge
 
 ROOT = Path(__file__).resolve().parent
@@ -102,9 +104,69 @@ class DuckParser(HTMLParser):
         self._finish_current()
 
 
+class PageTextParser(HTMLParser):
+    """Extract readable page text while ignoring scripts and page chrome."""
+    SKIP = {"script", "style", "noscript", "svg", "nav", "footer", "header", "form"}
+    BLOCK = {"p", "div", "article", "section", "h1", "h2", "h3", "li", "blockquote", "br"}
+    def __init__(self):
+        super().__init__()
+        self.skip_depth = 0
+        self.parts = []
+    def handle_starttag(self, tag, attrs):
+        if tag in self.SKIP:
+            self.skip_depth += 1
+        elif not self.skip_depth and tag in self.BLOCK:
+            self.parts.append("\\n")
+    def handle_endtag(self, tag):
+        if tag in self.SKIP and self.skip_depth:
+            self.skip_depth -= 1
+        elif not self.skip_depth and tag in self.BLOCK:
+            self.parts.append("\\n")
+    def handle_data(self, data):
+        if not self.skip_depth:
+            clean = re.sub(r"\\s+", " ", data).strip()
+            if clean:
+                self.parts.append(clean)
+    def text(self):
+        return re.sub(r"\\n{3,}", "\\n\\n", " ".join(self.parts)).strip()
+
+
+def _public_http_url(url):
+    """Allow only public HTTP(S) destinations; reject local/private hosts."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return False
+    host = parsed.hostname.lower()
+    if host in ("localhost",) or host.endswith((".local", ".internal")):
+        return False
+    try:
+        addresses = {item[4][0] for item in socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80))}
+        return bool(addresses) and all(ipaddress.ip_address(addr).is_global for addr in addresses)
+    except (OSError, ValueError):
+        return False
+
+
+def read_webpage(url, max_chars=9000):
+    """Fetch a public web page and return readable text; never fetch private-network URLs."""
+    if not _public_http_url(url):
+        return ""
+    request = Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; GENESIS-AI/0.2)", "Accept": "text/html"})
+    try:
+        with urlopen(request, timeout=12) as response:
+            content_type = response.headers.get("Content-Type", "")
+            if "text/html" not in content_type and "application/xhtml" not in content_type:
+                return ""
+            raw = response.read(1_000_000).decode("utf-8", "replace")
+        parser = PageTextParser()
+        parser.feed(raw)
+        return parser.text()[:max_chars]
+    except (HTTPError, URLError, TimeoutError, OSError, ValueError):
+        return ""
+
+
 def search_web(query, limit=5):
     url = "https://html.duckduckgo.com/html/?" + urlencode({"q": query})
-    request = Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; GENESIS-AI/0.1)"})
+    request = Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; GENESIS-AI/0.2)"})
     with urlopen(request, timeout=18) as response:
         page = response.read().decode("utf-8", "replace")
     parser = DuckParser()
@@ -116,30 +178,41 @@ def search_web(query, limit=5):
             link = "https:" + link
         if "duckduckgo.com/l/?" in link:
             link = parse_qs(urlparse(link).query).get("uddg", [link])[0]
-        if link.startswith("http") and link not in seen and item["title"]:
+        if link.startswith("http") and link not in seen and item["title"] and _public_http_url(link):
             seen.add(link)
             results.append({
-                "title": re.sub(r"\s+", " ", item["title"]).strip(),
+                "title": re.sub(r"\\s+", " ", item["title"]).strip(),
                 "url": link,
-                "snippet": re.sub(r"\s+", " ", item["snippet"]).strip()
+                "snippet": re.sub(r"\\s+", " ", item["snippet"]).strip(),
+                "content": ""
             })
         if len(results) >= limit:
             break
+    # Read the actual pages, not just the search-engine snippets.
+    for item in results[:3]:
+        item["content"] = read_webpage(item["url"])
     return results
 
 
 def compose_search_answer(query, sources):
-    """Compose a transparent extractive response from search snippets, not an LLM."""
+    """Build a source-grounded extractive summary; this is not an LLM."""
     if not sources:
         return ("Я выполнил поиск, но не получил подходящих результатов. "
                 "Попробуй переформулировать запрос или повторить позже.")
-    lines = ["Вот что удалось найти по запросу «" + query + "»:"]
-    for item in sources[:4]:
-        snippet = item["snippet"] or "Открой источник, чтобы прочитать подробности."
-        lines.append("• " + item["title"] + " — " + snippet)
-    lines.append("\nЭто краткая сводка найденных описаний, а не ответ обученной нейросети. "
-                 "Открой источники ниже, чтобы проверить детали.")
-    return "\n".join(lines)
+    usable = [item for item in sources if item.get("content") or item.get("snippet")]
+    if not usable:
+        return ("Поиск нашёл страницы, но не смог прочитать их содержимое. "
+                "Открой источники ниже или попробуй другой запрос.")
+    lines = ["## Что удалось найти"]
+    for item in usable[:3]:
+        body = item.get("content") or item.get("snippet", "")
+        # Keep a compact passage instead of dumping an entire page.
+        sentences = re.split(r"(?<=[.!?])\\s+", body)
+        useful = [s.strip() for s in sentences if len(s.strip()) > 45]
+        passage = " ".join(useful[:2]) if useful else body[:650]
+        lines.append("**" + item["title"] + "**\\n" + passage[:850])
+    lines.append("\\nСводка составлена по тексту доступных страниц. Ссылки на источники — ниже.")
+    return "\\n\\n".join(lines)
 
 
 def answer_locally(message, history=None):
