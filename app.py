@@ -223,8 +223,9 @@ def answer_locally(message, history=None):
     if calculation is not None:
         return "Результат: " + calculation, "calculator"
 
-    if re.search(r"\b(привет|здравствуй|здравствуйте|хай|hello|hi)\b", lower):
-        return "Привет! 👋 Рад тебя видеть. Что будем делать?", "conversation"
+    # Common Russian informal greetings and chat openers should never trigger web search.
+    if re.search(r"\b(привет|приветик|прив|здравствуй|здравствуйте|здорово|здарова|здаров|салам|ассалам|хай|хелло|hello|hi|йо|йоу|ку)\b", lower):
+        return "Привет! 👋 Рад тебя видеть. Как сам? Что будем делать?", "conversation"
     if re.search(r"\b(как дела|как ты|как поживаешь|как жизнь|ты как)\b", lower):
         return "У меня всё отлично — я на связи и готов помогать! А у тебя как дела?", "conversation"
     if re.search(r"\b(что нового|что новенького)\b", lower):
