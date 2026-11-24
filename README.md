@@ -7,10 +7,10 @@ GENESIS is an early, self-written assistant prototype. It does not call ChatGPT,
 - A small rule-based conversation layer for greetings and product identity.
 - A safe arithmetic evaluator using Python AST (it does not execute arbitrary Python).
 - Optional DuckDuckGo HTML search.
-- Extractive answer composition from search result titles and snippets, with clickable source links.
+- Automatic DuckDuckGo web search for questions the local conversation rules cannot answer.\n- Fetching and extracting readable text from up to three public result pages, with source links.\n- A compact extractive summary based on page text (not a generative LLM).\n- Public-address checks before fetching result pages to reduce SSRF exposure.
 - A minimal HTTP backend and browser chat UI.
 
-**Honest limitation:** this is not yet a trained neural network and cannot reason freely like a modern LLM. Search answers summarize result snippets; users should open sources to verify details. The next research milestone is building and training our own language model.
+**Honest limitation:** this is not yet a trained neural network and cannot reason freely like a modern LLM. Search answers summarize passages extracted from accessible result pages; some sites block automated access, so users should open sources to verify details. The answer composer is extractive, not a reasoning language model. The next research milestone is building and training our own language model.
 
 ## Run locally
 
