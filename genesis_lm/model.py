@@ -50,7 +50,7 @@ class Block(nn.Module):
         return x + self.mlp(self.norm2(x))
 
 class GenesisLM(nn.Module):
-    def __init__(self, width=192, layers=6, heads=6, block_size=256, dropout=0.1):
+    def __init__(self, width=192, layers=6, heads=6, block_size=256, dropout=0.1, vocab_size=256):
         super().__init__()
         self.block_size = block_size
         self.token_embedding = nn.Embedding(VOCAB_SIZE, width)
@@ -58,7 +58,7 @@ class GenesisLM(nn.Module):
         self.drop = nn.Dropout(dropout)
         self.blocks = nn.Sequential(*[Block(width, heads, dropout) for _ in range(layers)])
         self.norm = nn.LayerNorm(width)
-        self.lm_head = nn.Linear(width, VOCAB_SIZE, bias=False)
+        self.lm_head = nn.Linear(width, vocab_size, bias=False)
         self.lm_head.weight = self.token_embedding.weight
         self.apply(self._init_weights)
 
@@ -77,7 +77,7 @@ class GenesisLM(nn.Module):
         positions = torch.arange(steps, device=tokens.device)
         x = self.drop(self.token_embedding(tokens) + self.position_embedding(positions))
         logits = self.lm_head(self.norm(self.blocks(x)))
-        loss = F.cross_entropy(logits.reshape(-1, VOCAB_SIZE), targets.reshape(-1)) if targets is not None else None
+        loss = F.cross_entropy(logits.reshape(-1, self.vocab_size), targets.reshape(-1)) if targets is not None else None
         return logits, loss
 
     @torch.no_grad()
