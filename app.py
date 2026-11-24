@@ -532,6 +532,9 @@ class Handler(BaseHTTPRequestHandler):
                                             "image":result.get("image_url"),"sources":[],"engine":"GENESIS-image"})
             sources = []
             answer, engine = answer_locally(message, history)
+            # Fixed FAQ snippets are too shallow: let the language model explain these topics fully.
+            if engine in ("GENESIS-scripted-faq",):
+                answer, engine = None, "GENESIS-local-LLM"
             # Search current/fast-changing questions first, then let the local LLM synthesize.
             needs_fresh_info = bool(re.search(
                 r"(?i)\\b(сейчас|сегодня|последн|новост|актуальн|на данный момент|курс|цена|стоимость|погода|результат матча|кто выиграл)\\w*\\b",
