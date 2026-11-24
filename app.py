@@ -477,7 +477,8 @@ class Handler(BaseHTTPRequestHandler):
                     answer = ("Не удалось подключиться к поиску прямо сейчас. "
                               "Проверь соединение сервера и попробуй ещё раз.")
                     engine, sources = "GENESIS-rules-v0.1", []
-            return self.send_json(200, {"reply": answer, "sources": sources, "engine": engine})
+            public_sources = [{"title": item.get("title", ""), "url": item.get("url", "")} for item in sources if item.get("title") and item.get("url")]
+            return self.send_json(200, {"reply": answer, "sources": public_sources, "engine": engine})
         except (ValueError, json.JSONDecodeError):
             return self.send_json(400, {"error": "Некорректный JSON-запрос."})
         except Exception as error:
